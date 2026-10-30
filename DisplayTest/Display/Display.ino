@@ -10,6 +10,8 @@
 #define OLED_CS    10  
 #define OLED_RESET  8   
 
+
+
 //U8G2_SSD1306_128X64_NONAME_F_4W_HW_SPI u8g2(U8G2_R0, /* cs=*/ 10, /* dc=*/ 9, /* reset=*/ 8);
 //U8G2_SSD1306_128X64_NONAME_F_4W_HW_SPI u8g2(U8G2_R0, /* cs=*/ 10, /* dc=*/ 9, /* reset=*/ 8);
 //U8G2_SH1106_128X64_NONAME_F_4W_HW_SPI u8g2(U8G2_R0, /* cs=*/ 10, /* dc=*/ 9, /* reset=*/ 8);
@@ -88,6 +90,23 @@ float floatingAngle = 0.0;     // A hullámzás aktuális szöge (radiánban)
 const float floatSpeed = 0.08; // Lebegés sebessége (kisebb = lassabb, andalítóbb)
 const int floatRange = 4;      // Kitérés pixelben (±4 pixel fel és le)
 
+// ---Buzzer--- 
+const int BUZZER_PIN = 2;
+
+const unsigned long MIN_INTERVAL = 2000;
+const unsigned long MAX_INTERVAL = 6000;
+
+const int FREQ_START = 450;
+const int FREQ_END   = 1400;
+const int FREQ_STEP  = 45;
+const unsigned long STEP_DURATION = 2;
+
+bool isPlaying = false;
+int currentFreq = FREQ_START;
+unsigned long lastStepTime = 0;
+unsigned long lastBubbleEndTime = 0;
+unsigned long nextInterval = 3000;
+
 void setup() {
  
   display.begin(0, true);
@@ -98,9 +117,23 @@ void setup() {
 
 	display.display();
 */
+
+	pinMode(BUZZER_PIN, OUTPUT);
+  randomSeed(analogRead(A0));
+  
+  // Első véletlen időzítés beállítása
+  nextInterval = random(MIN_INTERVAL, MAX_INTERVAL);
 }
 
 void loop() {
+
+	upndown();
+
+	bubbleSound();
+}
+
+
+void upndown() {
 	display.clearDisplay();
 
 	int offsetY = sin(floatingAngle) * floatRange;
@@ -116,4 +149,40 @@ void loop() {
 	}
 
 	delay(25);
+}
+
+// Ezt a függvényt folyamatosan hívhatod a loop-ban
+void bubbleSound() {
+  unsigned long currentMillis = millis();
+
+  // 1. ÁLLAPOT: Várakozás a következő buborékra
+  if (!isPlaying) {
+    if (currentMillis - lastBubbleEndTime >= nextInterval) {
+      // Elérkezett az idő: indítjuk a buborékot
+      isPlaying = true;
+      currentFreq = FREQ_START;
+      lastStepTime = currentMillis;
+      tone(BUZZER_PIN, currentFreq);
+    }
+    return; // Még nem szól, visszatérünk a loop többi részéhez
+  }
+
+  // 2. ÁLLAPOT: A hang éppen fut (lépésről lépésre emeljük a frekvenciát)
+  if (isPlaying) {
+    if (currentMillis - lastStepTime >= STEP_DURATION) {
+      lastStepTime = currentMillis;
+      currentFreq += FREQ_STEP;
+
+      if (currentFreq <= FREQ_END) {
+        tone(BUZZER_PIN, currentFreq);
+      } else {
+        // Elértük a felső határt, vége a buboréknak
+        noTone(BUZZER_PIN);
+        isPlaying = false;
+        lastBubbleEndTime = currentMillis;
+        // Új véletlen idő kisorsolása a következő buborékig
+        nextInterval = random(MIN_INTERVAL, MAX_INTERVAL);
+      }
+    }
+  }
 }
