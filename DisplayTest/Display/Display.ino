@@ -86,11 +86,18 @@ const unsigned char epd_bitmap_Tamagochi [] PROGMEM = {
 	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
 };
 
+//---Meow Button---
+const int BUTTON_PIN = 3;       // Gomb lába (a pin és a GND közé kötve)
+bool lastButtonState = HIGH;     // INPUT_PULLUP miatt nyugalomban HIGH
+unsigned long lastDebounceTime = 0;
+const unsigned long DEBOUNCE_DELAY = 50;
+
+// ---Floating Animation---
 float floatingAngle = 0.0;     // A hullámzás aktuális szöge (radiánban)
 const float floatSpeed = 0.08; // Lebegés sebessége (kisebb = lassabb, andalítóbb)
 const int floatRange = 4;      // Kitérés pixelben (±4 pixel fel és le)
 
-// ---Buzzer--- 
+//---Buzzer--- 
 const int BUZZER_PIN = 2;
 
 const unsigned long MIN_INTERVAL = 2000;
@@ -107,6 +114,8 @@ unsigned long lastStepTime = 0;
 unsigned long lastBubbleEndTime = 0;
 unsigned long nextInterval = 3000;
 
+bool isPlayingMeow = false;
+
 void setup() {
  
   display.begin(0, true);
@@ -117,8 +126,9 @@ void setup() {
 
 	display.display();
 */
-
 	pinMode(BUZZER_PIN, OUTPUT);
+  pinMode(BUTTON_PIN, INPUT_PULLUP);
+
   randomSeed(analogRead(A0));
   
   // Első véletlen időzítés beállítása
@@ -129,7 +139,11 @@ void loop() {
 
 	upndown();
 
-	bubbleSound();
+	checkButton();
+
+	//bubbleSound();
+
+
 }
 
 
@@ -185,4 +199,68 @@ void bubbleSound() {
       }
     }
   }
+}
+
+void checkButton() {
+  int reading = digitalRead(BUTTON_PIN);
+
+  // Pergésmentesített lenyomás-figyelés (HIGH -> LOW átmenet)
+  if (reading != lastButtonState) {
+    lastDebounceTime = millis();
+  }
+
+  if ((millis() - lastDebounceTime) > DEBOUNCE_DELAY) {
+    // Ha a gombot most nyomták le
+    static bool buttonProcessed = false;
+
+    if (reading == LOW && !buttonProcessed) {
+      buttonProcessed = true;
+      triggerMeow(); // Nyávogás indítása prioritással
+    } else if (reading == HIGH) {
+      buttonProcessed = false;
+    }
+  }
+
+  lastButtonState = reading;
+}
+
+void triggerMeow() {
+  // 1. Ha épp fut a buborék, azonnal megszakítjuk
+  if (isPlaying) {
+    noTone(BUZZER_PIN);
+    isPlaying = false;
+  }
+
+  // 2. Lejátsszuk a nyávogást
+  MeowSound();
+
+  // 3. Újraindítjuk a buborék időzítőjét, hogy ne közvetlenül a nyávogás után szóljon
+  lastBubbleEndTime = millis();
+  nextInterval = random(MIN_INTERVAL, MAX_INTERVAL);
+}
+
+void MeowSound() {
+
+	if (!isPlaying && !isPlayingMeow) {
+		// 1. Felvezetés: gyors emelkedés 700 Hz-ről ~1400 Hz-re
+		for (int freq = 700; freq < 1400; freq += 25) {
+			tone(BUZZER_PIN, freq);
+			delay(4);
+		}
+
+		// 2. A nyávogás teteje / nyújtás (~1400 Hz - 1200 Hz környékén kis lebegtetés)
+		for (int freq = 1400; freq > 1150; freq -= 10) {
+			tone(BUZZER_PIN, freq);
+			delay(8);
+		}
+
+		// 3. Lecsengés: lassú ereszkedés 1150 Hz-ről 500 Hz-re
+		for (int freq = 1150; freq > 500; freq -= 15) {
+			tone(BUZZER_PIN, freq);
+			delay(10);
+		}
+
+		// Hang kikapcsolása a végén
+		noTone(BUZZER_PIN);
+	}
 }
